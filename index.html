@@ -6,13 +6,13 @@
 <meta name="theme-color" content="#0a0a0a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="SplitVault">
+<meta name="apple-mobile-web-app-title" content="MoneyMate">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="format-detection" content="telephone=no">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="apple-touch-startup-image" href="icon-512.png">
 <link rel="manifest" href="manifest.json">
-<title>SplitVault</title>
+<title>MoneyMate</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
@@ -362,8 +362,8 @@ body{
 <!-- ── TOP NAV ── -->
 <nav class="nav">
   <div class="brand" onclick="showView('dash')">
-    <div class="brand-mark">SV</div>
-    SplitVault
+    <div class="brand-mark">MM</div>
+    MoneyMate
   </div>
   <div class="nav-acts">
     <button class="btn bg bsm" onclick="openSearch()" title="Search everything" style="padding:6px 10px;">
@@ -704,7 +704,7 @@ body{
         </div>
         <div class="fg"><label class="fl">Cost Last Time</label>
           <div class="fiw"><div class="fip" id="maint-pfx">₹</div><input type="number" class="fi" id="maint-cost" placeholder="0" min="0" step="1"></div>
-          <div style="font-size:10px;color:var(--grn);font-family:var(--mono);margin-top:4px;">✓ Will be added to expenses on that date</div>
+          <div id="maint-cost-hint" style="font-size:10px;color:var(--grn);font-family:var(--mono);margin-top:4px;">✓ Will be added to expenses on that date</div>
         </div>
       </div>
       <div class="fg"><label class="fl">Remind me every</label>
@@ -785,7 +785,7 @@ body{
 
 <script>
 /* ═══════════════════════════════════════════
-   SplitVault — single-file PWA
+   MoneyMate — single-file PWA
    Local-first · No accounts · No servers
 ═══════════════════════════════════════════ */
 
@@ -2662,7 +2662,7 @@ function saveSettings(){
 function expJSON(){
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(DB,null,2)],{type:'application/json'}));
-  a.download=`splitvault-${tday()}.json`; a.click(); toast('Backup downloaded');
+  a.download=`moneymate-${tday()}.json`; a.click(); toast('Backup downloaded');
 }
 function expCSV(){
   const rows=[['Date','Description','Category','Amount','LentTo','Notes','Source']];
@@ -2671,7 +2671,7 @@ function expCSV(){
   const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download=`splitvault-${tday()}.csv`; a.click(); toast('CSV exported');
+  a.download=`moneymate-${tday()}.csv`; a.click(); toast('CSV exported');
 }
 function impJSON(ev){
   const f=ev.target.files[0]; if(!f) return;
@@ -2684,7 +2684,7 @@ function impJSON(ev){
       if(d.currency)DB.currency=d.currency;
       if(d.budget)DB.budget=d.budget;
       saveDB(); closeMod('m-bkp'); toast('Import successful'); showView(CV);
-    }catch(_){toast('Invalid file — must be a SplitVault JSON');}
+    }catch(_){toast('Invalid file — must be a MoneyMate JSON');}
   };
   r.readAsText(f); ev.target.value='';
 }
@@ -2728,13 +2728,15 @@ function maintDaysUntil(item) {
 }
 function maintStatus(item) {
   const d = maintDaysUntil(item);
-  if (!item.lastDate)  return {label:'Never serviced', color:'var(--ink4)'};
-  if (d === null)      return {label:'KM based',        color:'var(--ink4)'};
-  if (d < 0)           return {label:`Overdue ${Math.abs(d)}d`, color:'var(--red)'};
-  if (d === 0)         return {label:'Due Today!',       color:'var(--red)'};
-  if (d <= 7)          return {label:`Due in ${d}d`,     color:'var(--amb)'};
-  if (d <= 30)         return {label:`Due in ${d}d`,     color:'#1a7a3c'};
-  return                      {label:`Due in ${d}d`,     color:'var(--ink4)'};
+  if (!item.lastDate)  return {label:'Never serviced',    color:'var(--ink4)'};
+  if (d === null)      return {label:'KM based',           color:'var(--ink4)'};
+  if (d < 0)           return {label:'Overdue by ' + Math.abs(d) + 'd', color:'var(--red)'};
+  if (d === 0)         return {label:'Due Today!',          color:'var(--red)'};
+  if (d <= 3)          return {label:'Due in ' + d + 'd',   color:'var(--red)'};   // urgent
+  if (d <= 7)          return {label:'Due in ' + d + 'd',   color:'var(--amb)'};   // soon
+  if (d <= 14)         return {label:'Due in ' + d + 'd',   color:'var(--amb)'};   // upcoming
+  if (d <= 30)         return {label:'Due in ' + d + 'd',   color:'var(--grn)'};   // coming up
+  return                      {label:'Due in ' + d + 'd',   color:'var(--ink4)'}; // far away
 }
 function totalMaintCost(item) {
   // history is always seeded with the initial entry when lastDate+lastCost are provided
@@ -2883,9 +2885,12 @@ function openAddMaint(editId) {
     ['maint-name','maint-asset','maint-last','maint-cost','maint-interval','maint-km','maint-notes'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('maint-unit').value = 'months';
   }
-  document.getElementById('maint-ttl').textContent  = editId?'Edit Item':'Add Item';
-  document.getElementById('maint-save').textContent = editId?'Update':'Save';
+  document.getElementById('maint-ttl').textContent  = editId ? 'Edit Item' : 'Add Item';
+  document.getElementById('maint-save').textContent = editId ? 'Update' : 'Save';
   document.getElementById('maint-pfx').textContent  = DB.currency;
+  // Show cost hint only when adding new item
+  const hint = document.getElementById('maint-cost-hint');
+  if (hint) hint.style.display = editId ? 'none' : 'block';
   _renderMaintIcons();
   document.getElementById('maint-km-wrap').style.display =
     document.getElementById('maint-unit').value==='km'?'grid':'none';
@@ -2914,84 +2919,76 @@ function saveMaintItem() {
   const asset    = document.getElementById('maint-asset').value.trim();
   const km       = parseFloat(document.getElementById('maint-km').value)||0;
   const notes    = document.getElementById('maint-notes').value.trim();
+  const unit     = document.getElementById('maint-unit').value;
 
-  if(!name)             { toast('Enter a name'); return; }
-  if(!interval||interval<1) { toast('Enter reminder interval (e.g. 3 months)'); return; }
-  if(!DB.maintenance)   DB.maintenance=[];
+  if (!name)              { toast('Enter a name'); return; }
+  if (!interval||interval<1) { toast('Enter reminder interval e.g. 3 months'); return; }
+  if (!DB.maintenance)    DB.maintenance = [];
 
   const existing   = MAINT_EID ? (DB.maintenance.find(x=>x.id===MAINT_EID)||{}) : {};
   const itemId     = MAINT_EID || uid();
   const isNew      = !MAINT_EID;
   const hadHistory = (existing.history||[]).length > 0;
 
-  // Seed history with the initial entry
   let history = existing.history ? [...existing.history] : [];
-  let addedExpenseId = null;
 
   if (isNew && lastDate && lastCost > 0) {
-    // Brand new item — seed history AND add to personal expenses on the correct date
-    addedExpenseId = uid();
-    history = [{
-      id: uid(), date: lastDate, cost: lastCost, km,
-      notes: notes||('Initial: '+name), loggedAt: new Date().toISOString()
-    }];
-    // Add to personal expenses on the date it was done
+    // Brand new item — seed history and add expense on the correct historical date
+    history = [{ id:uid(), date:lastDate, cost:lastCost, km, notes:notes||('Initial: '+name), loggedAt:new Date().toISOString() }];
     DB.personal.unshift({
-      id:          addedExpenseId,
-      desc:        name + (asset ? ' — ' + asset : ''),
-      amount:      lastCost,
-      date:        lastDate,
-      cat:         CAT_MAINT,
-      lendTo:      '',
-      notes:       notes || ('Maintenance: ' + name),
-      maintItemId: itemId,
-      createdAt:   new Date().toISOString()
+      id:uid(), desc:name+(asset?' — '+asset:''), amount:lastCost,
+      date:lastDate, cat:CAT_MAINT, lendTo:'',
+      notes:notes||('Maintenance: '+name), maintItemId:itemId,
+      createdAt:new Date().toISOString()
     });
 
   } else if (!isNew && !hadHistory && lastDate && lastCost > 0) {
-    // Editing item that had no history yet — seed it now
-    history = [{
-      id: uid(), date: lastDate, cost: lastCost, km: 0,
-      notes: 'Initial entry', loggedAt: new Date().toISOString()
-    }];
-    // Also add to personal expenses if not already there
-    const alreadyLinked = DB.personal.some(e => e.maintItemId === itemId);
-    if (!alreadyLinked) {
+    // Editing — no history yet, seed it and add expense if not already linked
+    history = [{ id:uid(), date:lastDate, cost:lastCost, km:0, notes:'Initial entry', loggedAt:new Date().toISOString() }];
+    if (!DB.personal.some(e => e.maintItemId === itemId)) {
       DB.personal.unshift({
-        id: uid(), desc: name + (asset?' — '+asset:''),
-        amount: lastCost, date: lastDate, cat: CAT_MAINT,
-        lendTo: '', notes: notes||('Maintenance: '+name),
-        maintItemId: itemId, createdAt: new Date().toISOString()
+        id:uid(), desc:name+(asset?' — '+asset:''), amount:lastCost,
+        date:lastDate, cat:CAT_MAINT, lendTo:'',
+        notes:notes||('Maintenance: '+name), maintItemId:itemId,
+        createdAt:new Date().toISOString()
       });
     }
+  } else if (!isNew && hadHistory) {
+    // Editing item that already has history —
+    // sync the description of any linked personal expenses if name/asset changed
+    const newDesc = name + (asset ? ' — ' + asset : '');
+    DB.personal.forEach(e => {
+      if (e.maintItemId === itemId) {
+        e.desc = newDesc;
+        // also update notes if it was auto-generated
+        if (e.notes && e.notes.startsWith('Maintenance:')) {
+          e.notes = 'Maintenance: ' + name;
+        }
+      }
+    });
   }
 
   const obj = {
-    id:        itemId,
-    icon:      MAINT_ICONS[MAINT_ICON_IDX].e,
-    name,
-    asset,
-    lastDate,
-    lastCost,
-    interval,
-    unit:      document.getElementById('maint-unit').value,
-    currentKm: km,
-    notes,
-    history,
+    id:itemId, icon:MAINT_ICONS[MAINT_ICON_IDX].e,
+    name, asset, lastDate, lastCost, interval, unit,
+    currentKm:km, notes, history,
     createdAt: existing.createdAt || new Date().toISOString()
   };
 
-  if(MAINT_EID) { const idx=DB.maintenance.findIndex(x=>x.id===MAINT_EID); if(idx>=0)DB.maintenance[idx]=obj; }
-  else DB.maintenance.unshift(obj);
+  if (MAINT_EID) {
+    const idx = DB.maintenance.findIndex(x=>x.id===MAINT_EID);
+    if (idx>=0) DB.maintenance[idx] = obj;
+  } else {
+    DB.maintenance.unshift(obj);
+  }
 
   saveDB();
   closeMod('m-maint');
 
-  // Confirm what happened
   if (isNew && lastDate && lastCost > 0) {
     toast(name + ' added · ' + DB.currency + fmt(lastCost) + ' logged to ' + lastDate.slice(0,7));
   } else {
-    toast(MAINT_EID ? 'Updated ✓' : 'Added ✓');
+    toast(isNew ? 'Added \u2713' : 'Updated \u2713');
   }
   rMaintain();
 }
